@@ -1,0 +1,23 @@
+{
+  "accuracy": 0.9293478260869565,
+  "precision_phishing": 0.9716814159292035,
+  "recall_phishing": 0.8707375099127677,
+  "f1_phishing": 0.918444165621079,
+  "false_positive_rate": 0.02134756504336224,
+  "confusion_matrix": [
+    [
+      1467,
+      32
+    ],
+    [
+      163,
+      1098
+    ]
+  ],
+  "tn": 1467,
+  "fp": 32,
+  "fn": 163,
+  "tp": 1098,
+  "selected_classifier": "CalibratedLinearSVC",
+  "test_samples": 2760
+}

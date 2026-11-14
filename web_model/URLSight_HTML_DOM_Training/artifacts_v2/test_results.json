@@ -1,0 +1,23 @@
+{
+  "accuracy": 0.9528985507246377,
+  "precision_phishing": 0.9654320987654321,
+  "recall_phishing": 0.9302141157811261,
+  "f1_phishing": 0.9474959612277868,
+  "false_positive_rate": 0.028018679119412943,
+  "confusion_matrix": [
+    [
+      1457,
+      42
+    ],
+    [
+      88,
+      1173
+    ]
+  ],
+  "tn": 1457,
+  "fp": 42,
+  "fn": 88,
+  "tp": 1173,
+  "selected_experiment": "V2_C_without_external_image_features",
+  "test_samples": 2760
+}

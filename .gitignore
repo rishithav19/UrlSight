@@ -1,0 +1,26 @@
+.env
+.env.*
+!.env.example
+token.json
+credentials/client_secret.json
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.streamlit/secrets.toml
+# OAuth secrets
+.streamlit/secrets.toml
+credentials/
+
+# Gmail token database
+gmail_tokens.db
+
+# Old authentication token
+token.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+datasets/

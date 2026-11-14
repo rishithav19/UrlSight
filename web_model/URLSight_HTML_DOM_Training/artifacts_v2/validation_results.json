@@ -1,0 +1,68 @@
+{
+  "V2_A_scaled": {
+    "accuracy": 0.9667085427135679,
+    "precision_phishing": 0.9397781299524565,
+    "recall_phishing": 0.975328947368421,
+    "f1_phishing": 0.9572235673930589,
+    "false_positive_rate": 0.03861788617886179,
+    "confusion_matrix": [
+      [
+        946,
+        38
+      ],
+      [
+        15,
+        593
+      ]
+    ],
+    "tn": 946,
+    "fp": 38,
+    "fn": 15,
+    "tp": 593,
+    "training_seconds": 36.57
+  },
+  "V2_B_without_host_length": {
+    "accuracy": 0.9673366834170855,
+    "precision_phishing": 0.939873417721519,
+    "recall_phishing": 0.9769736842105263,
+    "f1_phishing": 0.9580645161290322,
+    "false_positive_rate": 0.03861788617886179,
+    "confusion_matrix": [
+      [
+        946,
+        38
+      ],
+      [
+        14,
+        594
+      ]
+    ],
+    "tn": 946,
+    "fp": 38,
+    "fn": 14,
+    "tp": 594,
+    "training_seconds": 34.37
+  },
+  "V2_C_without_external_image_features": {
+    "accuracy": 0.967964824120603,
+    "precision_phishing": 0.9413629160063391,
+    "recall_phishing": 0.9769736842105263,
+    "f1_phishing": 0.9588377723970944,
+    "false_positive_rate": 0.037601626016260166,
+    "confusion_matrix": [
+      [
+        947,
+        37
+      ],
+      [
+        14,
+        594
+      ]
+    ],
+    "tn": 947,
+    "fp": 37,
+    "fn": 14,
+    "tp": 594,
+    "training_seconds": 32.99
+  }
+}

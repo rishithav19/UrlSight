@@ -1,0 +1,23 @@
+# Core URLSight application
+streamlit
+pandas
+numpy
+joblib
+python-dotenv
+playwright
+beautifulsoup4
+
+# Stage C URL detector: match the sklearn version used to serialize its artifacts
+scikit-learn==1.9.0
+torch
+torchvision
+scipy
+
+# Existing Gmail integration and AI explanation providers
+groq
+google-genai
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
+cryptography
+requests

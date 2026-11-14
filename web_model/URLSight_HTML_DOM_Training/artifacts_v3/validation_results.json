@@ -1,0 +1,46 @@
+{
+  "LogisticRegression": {
+    "accuracy": 0.967964824120603,
+    "precision_phishing": 0.9413629160063391,
+    "recall_phishing": 0.9769736842105263,
+    "f1_phishing": 0.9588377723970944,
+    "false_positive_rate": 0.037601626016260166,
+    "confusion_matrix": [
+      [
+        947,
+        37
+      ],
+      [
+        14,
+        594
+      ]
+    ],
+    "tn": 947,
+    "fp": 37,
+    "fn": 14,
+    "tp": 594,
+    "training_seconds": 36.11
+  },
+  "CalibratedLinearSVC": {
+    "accuracy": 0.9692211055276382,
+    "precision_phishing": 0.9544715447154472,
+    "recall_phishing": 0.9654605263157895,
+    "f1_phishing": 0.9599345870809485,
+    "false_positive_rate": 0.028455284552845527,
+    "confusion_matrix": [
+      [
+        956,
+        28
+      ],
+      [
+        21,
+        587
+      ]
+    ],
+    "tn": 956,
+    "fp": 28,
+    "fn": 21,
+    "tp": 587,
+    "training_seconds": 34.66
+  }
+}
