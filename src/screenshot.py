@@ -1,4 +1,3 @@
-
 import asyncio
 import ipaddress
 import socket
@@ -8,30 +7,35 @@ from playwright.async_api import async_playwright
 
 
 def validate_public_host(url):
-    """Reject non-public hostnames before opening a webpage."""
+    """Reject hostnames that resolve to non-public IP addresses.
+
+    This is a prototype-level check, not a complete SSRF defense. A hardened
+    deployment should run the browser in an isolated worker/container with
+    network-level egress restrictions and DNS rebinding protection.
+    """
     parsed = urlparse(url)
     host = parsed.hostname
 
     if not host:
         raise ValueError("The URL has no valid hostname.")
 
-    if host.lower() == "localhost" or host.endswith(".local"):
+    host = host.rstrip(".").lower()
+    if host == "localhost" or host.endswith(".local"):
         raise ValueError("Local hostnames are not allowed.")
 
     try:
         addresses = {
             item[4][0]
-            for item in socket.getaddrinfo(host, None)
+            for item in socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
         }
-    except socket.gaierror:
-        raise ValueError("The hostname could not be resolved.")
+    except socket.gaierror as exc:
+        raise ValueError("The hostname could not be resolved.") from exc
 
     if not addresses:
-        raise ValueError("No IP addresses were found.")
+        raise ValueError("No IP addresses were found for this host.")
 
     for address in addresses:
         ip = ipaddress.ip_address(address)
-
         if not ip.is_global:
             raise ValueError("Private or non-public hosts are not allowed.")
 
@@ -39,8 +43,8 @@ def validate_public_host(url):
 
 
 async def _capture_page_artifacts(url):
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(
             headless=True,
             args=["--no-sandbox"],
         )
@@ -65,7 +69,6 @@ async def _capture_page_artifacts(url):
                 await route.abort()
 
         await context.route("**/*", guard_request)
-
         page = await context.new_page()
 
         try:
@@ -74,15 +77,12 @@ async def _capture_page_artifacts(url):
                 wait_until="domcontentloaded",
                 timeout=20000,
             )
-
             await page.wait_for_timeout(1500)
 
-            # Capture both artifacts from the SAME rendered page.
             screenshot_bytes = await page.screenshot(
                 full_page=False,
                 type="png",
             )
-
             html_content = await page.content()
             final_url = page.url
             page_title = await page.title()
@@ -93,19 +93,17 @@ async def _capture_page_artifacts(url):
                 "final_url": final_url,
                 "title": page_title,
             }
-
         finally:
             await context.close()
             await browser.close()
 
 
 def capture_page_artifacts(url):
-    """Capture screenshot and rendered HTML in one browser session."""
+    """Return screenshot and rendered HTML from one browser visit."""
     validate_public_host(url)
     return asyncio.run(_capture_page_artifacts(url))
 
 
 def capture_screenshot(url):
-    """Backward-compatible screenshot-only function."""
-    artifacts = capture_page_artifacts(url)
-    return artifacts["screenshot"]
+    """Backward-compatible screenshot-only wrapper."""
+    return capture_page_artifacts(url)["screenshot"]

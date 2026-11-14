@@ -2,20 +2,17 @@ import html
 import json
 import math
 import re
-
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urlparse
-from bs4 import BeautifulSoup
-from urllib.parse import urljoin
 
 import pandas as pd
 import streamlit as st
 
-from src.screenshot import capture_screenshot
+from src.screenshot import capture_page_artifacts
 from src.analysis import analyze_url
 from src.ai_explainer import generate_explanation
 from url_detector.src.predict_url import PhishingPredictor
@@ -38,6 +35,28 @@ from services.gmail_service import (
 
 PROJECT_DIR = Path(__file__).resolve().parent
 URL_DETECTOR_DIR = PROJECT_DIR / "url_detector"
+
+# Locate the standalone HTML/DOM training package.
+HTML_DOM_CANDIDATES = [
+    PROJECT_DIR / "web_model" / "URLSight_HTML_DOM_Training",
+    PROJECT_DIR / "URLSight_HTML_DOM_Training",
+    PROJECT_DIR.parent / "URLSight_HTML_DOM_Training",
+]
+HTML_DOM_DIR = next(
+    (path for path in HTML_DOM_CANDIDATES if (path / "html_dom" / "features.py").exists()),
+    None,
+)
+
+if HTML_DOM_DIR is None:
+    raise FileNotFoundError(
+        "Could not find html_dom/features.py. Expected it under "
+        "web_model/URLSight_HTML_DOM_Training or URLSight_HTML_DOM_Training."
+    )
+
+if str(HTML_DOM_DIR) not in sys.path:
+    sys.path.insert(0, str(HTML_DOM_DIR))
+
+from html_dom.features import extract_dom_features, extract_dom_evidence
 
 st.set_page_config(
     page_title="URLSight | URL Security",
@@ -355,7 +374,8 @@ with st.sidebar:
         1. **Validate** the URL you enter
         2. **Classify** it with the Hybrid deep-hybrid URL model
         3. **Explain** it with rules and AI
-        4. **Preview** the page via screenshot
+        4. **Inspect** rendered HTML and DOM characteristics
+        5. **Preview** the page via screenshot
         """
     )
 
@@ -369,6 +389,9 @@ with st.sidebar:
                 "automatic_ai_error",
                 "automatic_screenshot",
                 "automatic_screenshot_error",
+                "automatic_page_html",
+                "automatic_page_final_url",
+                "automatic_page_title",
             ]:
                 st.session_state.pop(key, None)
             st.rerun()
@@ -385,6 +408,7 @@ st.markdown(
         <p>Hybrid-ready phishing analysis with URL intelligence and webpage preview.</p>
         <span class="pill"> Hybrid URL model</span>
         <span class="pill"> AI explanation</span>
+        <span class="pill"> HTML/DOM analysis</span>
         <span class="pill"> Screenshot preview</span>
     </div>
     """,
@@ -624,6 +648,9 @@ with st.expander("📧 Gmail integration – connect, switch accounts and scan l
                                 "automatic_ai_error",
                                 "automatic_screenshot",
                                 "automatic_screenshot_error",
+                                "automatic_page_html",
+                                "automatic_page_final_url",
+                                "automatic_page_title",
                             ]:
                                 st.session_state.pop(state_key, None)
 
@@ -672,6 +699,9 @@ if submitted:
             st.session_state.pop("automatic_ai_error", None)
             st.session_state.pop("automatic_screenshot", None)
             st.session_state.pop("automatic_screenshot_error", None)
+            st.session_state.pop("automatic_page_html", None)
+            st.session_state.pop("automatic_page_final_url", None)
+            st.session_state.pop("automatic_page_title", None)
 
         except Exception as exc:
             st.error(f"Prediction failed: {exc}")
@@ -711,6 +741,9 @@ if result:
         ai_error = None
         screenshot_bytes = None
         screenshot_error = None
+        page_html = None
+        page_final_url = url
+        page_title = None
 
         start_time = time.monotonic()
 
@@ -719,7 +752,7 @@ if result:
             expanded=True,
         ) as status:
             status.write("✔️ URL model prediction completed.")
-            status.write("⏳ Running AI analysis and webpage screenshot in parallel...")
+            status.write("⏳ Running AI analysis and webpage acquisition in parallel...")
 
             with ThreadPoolExecutor(max_workers=2) as executor:
                 ai_future = executor.submit(
@@ -734,12 +767,12 @@ if result:
                     decision_score=result["score"],
                 )
 
-                screenshot_future = executor.submit(
-                    capture_screenshot,
+                page_future = executor.submit(
+                    capture_page_artifacts,
                     url,
                 )
 
-                # Collect AI result. Screenshot runs concurrently.
+                # Collect AI result. Browser acquisition runs concurrently.
                 try:
                     explanation = ai_future.result()
                     status.write("✔️ AI explanation generated.")
@@ -747,13 +780,18 @@ if result:
                     ai_error = str(exc)
                     status.write("⚠️ AI explanation unavailable.")
 
-                # Collect screenshot result. AI has already been running.
+                # Screenshot and rendered HTML come from the same browser visit.
                 try:
-                    screenshot_bytes = screenshot_future.result()
-                    status.write("✔️ Webpage screenshot captured.")
+                    page_artifacts = page_future.result()
+                    screenshot_bytes = page_artifacts["screenshot"]
+                    page_html = page_artifacts["html"]
+                    page_final_url = page_artifacts["final_url"]
+                    page_title = page_artifacts["title"]
+                    status.write("✔️ Screenshot captured.")
+                    status.write("✔️ Rendered HTML extracted.")
                 except Exception as exc:
                     screenshot_error = str(exc)
-                    status.write("⚠️ Screenshot unavailable.")
+                    status.write("⚠️ Webpage acquisition unavailable.")
 
             # Enforce a minimum 2-second preparation period.
             elapsed = time.monotonic() - start_time
@@ -774,12 +812,18 @@ if result:
         st.session_state["automatic_ai_error"] = ai_error
         st.session_state["automatic_screenshot"] = screenshot_bytes
         st.session_state["automatic_screenshot_error"] = screenshot_error
+        st.session_state["automatic_page_html"] = page_html
+        st.session_state["automatic_page_final_url"] = page_final_url
+        st.session_state["automatic_page_title"] = page_title
         st.session_state["automatic_result_url"] = url
 
     explanation = st.session_state.get("automatic_explanation")
     ai_error = st.session_state.get("automatic_ai_error")
     screenshot_bytes = st.session_state.get("automatic_screenshot")
     screenshot_error = st.session_state.get("automatic_screenshot_error")
+    page_html = st.session_state.get("automatic_page_html")
+    page_final_url = st.session_state.get("automatic_page_final_url", url)
+    page_title = st.session_state.get("automatic_page_title")
 
     # ---------------- Show prediction only after preparation ----------------
 
@@ -825,10 +869,11 @@ if result:
 
     st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
-    tab_overview, tab_features, tab_ai, tab_shot = st.tabs(
+    tab_overview, tab_features, tab_html, tab_ai, tab_shot = st.tabs(
         [
             "📋 Overview",
             "🔬 URL Features",
+            "🌐 HTML/DOM Analysis",
             "🧠 AI Explanation",
             "📸 Screenshot",
         ]
@@ -945,6 +990,112 @@ if result:
             mime="application/json",
         )
 
+    # ---- HTML / DOM Analysis ----
+    with tab_html:
+        st.subheader("Webpage Structure Analysis")
+
+        if not page_html:
+            st.warning(
+                "Rendered HTML could not be extracted. "
+                "The webpage may have blocked navigation or timed out."
+            )
+            if screenshot_error:
+                with st.expander("Webpage acquisition error"):
+                    st.code(screenshot_error)
+        else:
+            try:
+                dom_features, visible_text = extract_dom_features(
+                    page_html,
+                    page_final_url,
+                )
+                links, forms = extract_dom_evidence(
+                    page_html,
+                    page_final_url,
+                )
+
+                # Page information
+                st.markdown("### Page Information")
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("HTML Length", f'{dom_features.get("html_length", 0):,}')
+                c2.metric("Visible Text", f'{dom_features.get("visible_text_length", 0):,}')
+                c3.metric("Total Links", dom_features.get("anchor_count", 0))
+                c4.metric("Total Forms", dom_features.get("forms_count", 0))
+                st.write("**Page title:**", page_title or "Unavailable")
+                st.write("**Final URL:**", page_final_url)
+
+                st.divider()
+
+                # Link analysis
+                st.markdown("### Link Analysis")
+                external_links = [item for item in links if item["Type"] == "External"]
+                internal_links = [item for item in links if item["Type"] == "Internal"]
+                other_links = [item for item in links if item["Type"] not in {"External", "Internal"}]
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Internal Links", len(internal_links))
+                c2.metric("External Links", len(external_links))
+                c3.metric("Other Links", len(other_links))
+                c4.metric("Total Links", len(links))
+
+                with st.expander(f"Inspect extracted links ({len(links)})"):
+                    if links:
+                        st.dataframe(
+                            pd.DataFrame(links),
+                            hide_index=True,
+                            use_container_width=True,
+                        )
+                    else:
+                        st.info("No links were found in the rendered HTML.")
+
+                # Form analysis
+                st.markdown("### Forms and Input Fields")
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Forms", len(forms))
+                c2.metric("Password Inputs", dom_features.get("password_input_count", 0))
+                c3.metric("Email Inputs", dom_features.get("email_input_count", 0))
+                c4.metric("Hidden Inputs", dom_features.get("hidden_input_count", 0))
+
+                with st.expander(f"Inspect individual forms ({len(forms)})", expanded=True):
+                    if forms:
+                        st.dataframe(
+                            pd.DataFrame(forms),
+                            hide_index=True,
+                            use_container_width=True,
+                        )
+                    else:
+                        st.info("No HTML forms were found.")
+
+                # Scripts and embedded content
+                st.markdown("### Scripts and Embedded Content")
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Scripts", dom_features.get("script_count", 0))
+                c2.metric("External Scripts", dom_features.get("external_script_count", 0))
+                c3.metric("Images", dom_features.get("image_count", 0))
+                c4.metric("Iframes", dom_features.get("iframe_count", 0))
+
+                with st.expander("View all extracted numerical DOM features"):
+                    dom_df = pd.DataFrame(
+                        [{"Feature": key, "Value": value} for key, value in dom_features.items()]
+                    )
+                    st.dataframe(dom_df, hide_index=True, use_container_width=True)
+
+                with st.expander("View extracted visible webpage text"):
+                    st.text_area(
+                        "Visible webpage text",
+                        visible_text,
+                        height=250,
+                        disabled=True,
+                    )
+
+                st.caption(
+                    "These values describe the rendered webpage. Individual indicators "
+                    "are evidence for analysis, not proof that a page is malicious."
+                )
+
+            except Exception as exc:
+                st.error(f"Could not analyze the extracted HTML: {exc}")
+                with st.expander("HTML analysis error details"):
+                    st.exception(exc)
+
     # ---- AI explanation ----
     with tab_ai:
         if explanation:
@@ -1008,6 +1159,6 @@ else:
     )
 
 
-# ---------------------------------- ----------------
+# --------------------------------------------------
 # Footer
 # --------------------------------------------------
